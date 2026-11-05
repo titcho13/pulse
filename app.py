@@ -23,3 +23,9 @@ st.metric(
 
 st.write("Dernière mise à jour :")
 st.success(datetime.now().strftime("%H:%M:%S"))
+from signal_engine import get_signal
+signal = get_signal()
+
+st.subheader("Signal")
+
+st.success(signal)
