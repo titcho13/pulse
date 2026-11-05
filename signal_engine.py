@@ -15,3 +15,8 @@ def get_data():
         data.columns = data.columns.get_level_values(0)
 
     return data
+    def get_price():
+
+    df = get_data()
+
+    return float(df["Close"].iloc[-1])
