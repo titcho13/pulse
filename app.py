@@ -1,21 +1,13 @@
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
+import yfinance as yf
 
-from signal_engine import get_price
+st.title("Test Nasdaq")
 
-st.set_page_config(
-    page_title="Pulse Nasdaq",
-    page_icon="📈",
-    layout="wide"
+data = yf.download(
+    "NQ=F",
+    period="1d",
+    interval="5m",
+    progress=False
 )
 
-st.title("📈 Pulse Nasdaq")
-
-st_autorefresh(interval=20000)
-
-prix = get_price()
-
-st.metric(
-    "Nasdaq Future",
-    round(prix, 2)
-)
+st.write(data.tail())
