@@ -1,9 +1,10 @@
 import yfinance as yf
 import pandas as pd
+import numpy as np
 
 
 # ==========================
-# TELECHARGEMENT DONNEES
+# Téléchargement
 # ==========================
 
 def get_data():
@@ -16,10 +17,6 @@ def get_data():
         auto_adjust=True
     )
 
-    if data.empty:
-        return pd.DataFrame()
-
-    # Corrige les MultiIndex Yahoo Finance
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)
 
@@ -27,114 +24,129 @@ def get_data():
 
 
 # ==========================
-# PRIX ACTUEL
+# Agrégation 15 minutes
+# ==========================
+
+def build_15m(df):
+
+    d15 = df.resample("15min").agg({
+        "Open": "first",
+        "High": "max",
+        "Low": "min",
+        "Close": "last",
+        "Volume": "sum"
+    })
+
+    d15 = d15.dropna()
+
+    return d15
+
+
+# ==========================
+# Prix
 # ==========================
 
 def get_price():
 
     df = get_data()
 
-    if df.empty:
-        return 0
-
     return float(df["Close"].iloc[-1])
 
 
 # ==========================
-# CONTEXTE DE MARCHE
+# Signal 15 min
+# ==========================
+
+def get_15m_signal():
+
+    df5 = get_data()
+    df15 = build_15m(df5)
+
+    close = df15["Close"]
+
+    ema20 = close.ewm(span=20).mean()
+    ema50 = close.ewm(span=50).mean()
+
+    momentum = close.pct_change(3)
+
+    dernier = len(close) - 1
+
+    achat = (
+        ema20.iloc[dernier] > ema50.iloc[dernier]
+        and momentum.iloc[dernier] > 0
+    )
+
+    vente = (
+        ema20.iloc[dernier] < ema50.iloc[dernier]
+        and momentum.iloc[dernier] < 0
+    )
+
+    if achat:
+        return 1, "🟢 ACHAT PRIORITAIRE"
+
+    if vente:
+        return -1, "🔴 VENTE PRIORITAIRE"
+
+    return 0, "⚪ AUCUN SIGNAL"
+
+
+# ==========================
+# Validation 5 min
+# ==========================
+
+def get_premium_setup():
+
+    df5 = get_data()
+
+    sens, signal = get_15m_signal()
+
+    if sens == 0:
+        return {
+            "signal": signal,
+            "premium": False,
+            "confirmation": "Aucune"
+        }
+
+    close = df5["Close"]
+
+    ema20 = close.ewm(span=20).mean()
+    ema50 = close.ewm(span=50).mean()
+
+    derniere = len(close) - 1
+
+    achat_valide = (
+        sens == 1
+        and ema20.iloc[derniere] > ema50.iloc[derniere]
+    )
+
+    vente_valide = (
+        sens == -1
+        and ema20.iloc[derniere] < ema50.iloc[derniere]
+    )
+
+    premium = achat_valide or vente_valide
+
+    return {
+        "signal": signal,
+        "premium": premium,
+        "confirmation": "✅ PREMIUM" if premium else "⏳ EN ATTENTE"
+    }
+
+
+# ==========================
+# Contexte
 # ==========================
 
 def get_market_context():
 
     df = get_data()
 
-    if df.empty:
-        return "Données indisponibles"
-
     close = df["Close"]
 
-    ema20 = close.ewm(span=20).mean()
     ema50 = close.ewm(span=50).mean()
+    ema200 = close.ewm(span=200).mean()
 
-    if ema20.iloc[-1] > ema50.iloc[-1]:
+    if ema50.iloc[-1] > ema200.iloc[-1]:
         return "🟢 HAUSSE"
 
     return "🔴 BAISSE"
-
-
-# ==========================
-# SIGNAL SIMPLE
-# ==========================
-
-def get_signal():
-
-    df = get_data()
-
-    if df.empty:
-        return "AUCUN SIGNAL"
-
-    close = df["Close"]
-
-    ema20 = close.ewm(span=20).mean()
-    ema50 = close.ewm(span=50).mean()
-
-    if ema20.iloc[-1] > ema50.iloc[-1]:
-        return "🟢 ACHAT"
-
-    return "🔴 VENTE"
-
-
-# ==========================
-# FORCE DU SIGNAL
-# ==========================
-
-def get_probability():
-
-    df = get_data()
-
-    if df.empty:
-        return 0
-
-    close = df["Close"]
-
-    ema20 = close.ewm(span=20).mean()
-    ema50 = close.ewm(span=50).mean()
-
-    ecart = abs(
-        (ema20.iloc[-1] - ema50.iloc[-1])
-        / ema50.iloc[-1]
-    ) * 100
-
-    score = min(round(ecart * 100), 95)
-
-    return max(score, 50)
-
-
-# ==========================
-# HEURE DERNIERE BOUGIE
-# ==========================
-
-def get_last_bar_time():
-
-    df = get_data()
-
-    if df.empty:
-        return "N/A"
-
-    return str(df.index[-1])
-
-
-# ==========================
-# DASHBOARD
-# ==========================
-
-def get_dashboard_data():
-
-    return {
-        "prix": get_price(),
-        "contexte": get_market_context(),
-        "signal": get_signal(),
-        "probabilite": get_probability(),
-        "derniere_bougie": get_last_bar_time()
-    }
-
